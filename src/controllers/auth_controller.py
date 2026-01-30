@@ -1,7 +1,8 @@
 import hashlib
+import logging
 import os
 import secrets
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import bcrypt as _bcrypt
 from jose import jwt
@@ -10,6 +11,8 @@ from src.config.settings import settings
 from src.models.user import User
 from src.models.vault_item import VaultItem
 from src.models.deletion_log import DeletionLog
+
+logger = logging.getLogger(__name__)
 
 
 def _generate_vault_salt() -> list[int]:
@@ -39,7 +42,7 @@ def _verify_token(token: str, hashed: str) -> bool:
 
 
 def _create_access_token(user_id: str) -> str:
-    expire = datetime.utcnow() + timedelta(minutes=settings.jwt_expires_minutes)
+    expire = datetime.now(UTC) + timedelta(minutes=settings.jwt_expires_minutes)
     return jwt.encode(
         {"userId": user_id, "exp": expire},
         settings.jwt_secret,
@@ -48,7 +51,7 @@ def _create_access_token(user_id: str) -> str:
 
 
 def _create_refresh_token(user_id: str) -> str:
-    expire = datetime.utcnow() + timedelta(days=settings.jwt_refresh_expires_days)
+    expire = datetime.now(UTC) + timedelta(days=settings.jwt_refresh_expires_days)
     return jwt.encode(
         {"userId": user_id, "exp": expire},
         settings.jwt_refresh_secret,
@@ -64,18 +67,30 @@ async def register(email: str, password: str, vault_salt: list[int] | None = Non
     if existing:
         return {"error": "Email already registered", "status": 409}
 
+    # Prepare everything before inserting to keep the operation atomic
+    password_hash = _hash_password(password)
+    salt = vault_salt or _generate_vault_salt()
+
+    # Create a temporary user to get an ID for token generation
     user = User(
         email=email,
-        password_hash=_hash_password(password),
-        vault_salt=vault_salt or _generate_vault_salt(),
+        password_hash=password_hash,
+        vault_salt=salt,
     )
     await user.insert()
 
-    access_token = _create_access_token(str(user.id))
-    refresh_token = _create_refresh_token(str(user.id))
+    try:
+        access_token = _create_access_token(str(user.id))
+        refresh_token = _create_refresh_token(str(user.id))
+        user.refresh_token_hash = _hash_token(refresh_token)
+        await user.save()
+    except Exception:
+        # Rollback: delete the user if token generation fails
+        await user.delete()
+        logger.exception("Failed to generate tokens during registration")
+        raise
 
-    user.refresh_token_hash = _hash_token(refresh_token)
-    await user.save()
+    logger.info("User registered: %s", email)
 
     return {
         "data": {
@@ -176,15 +191,15 @@ async def forgot_password(email: str):
 
     reset_token = secrets.token_hex(32)
     user.reset_token_hash = _hash_token(reset_token)
-    user.reset_token_expiry = datetime.utcnow() + timedelta(hours=1)
+    user.reset_token_expiry = datetime.now(UTC) + timedelta(hours=1)
     await user.save()
 
     from src.utils.email import send_reset_email
 
     try:
         await send_reset_email(email, reset_token)
-    except Exception as e:
-        print(f"Failed to send reset email: {e}")
+    except Exception:
+        logger.exception("Failed to send reset email to %s", email)
 
     return {"data": {"message": "If the email exists, a reset link was sent"}}
 
@@ -194,7 +209,7 @@ async def verify_reset_token(email: str, token: str):
     if not user or not user.reset_token_hash or not user.reset_token_expiry:
         return {"error": "Invalid or expired reset token", "status": 400}
 
-    if datetime.utcnow() > user.reset_token_expiry:
+    if datetime.now(UTC) > user.reset_token_expiry:
         return {"error": "Invalid or expired reset token", "status": 400}
 
     if not _verify_token(token, user.reset_token_hash):
@@ -210,7 +225,7 @@ async def reset_account(
     if not user or not user.reset_token_hash or not user.reset_token_expiry:
         return {"error": "Invalid or expired reset token", "status": 400}
 
-    if datetime.utcnow() > user.reset_token_expiry:
+    if datetime.now(UTC) > user.reset_token_expiry:
         return {"error": "Invalid or expired reset token", "status": 400}
 
     if not _verify_token(token, user.reset_token_hash):

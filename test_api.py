@@ -41,21 +41,33 @@ def put(path, data, token):
         return e.code, json.loads(e.read())
 
 
+import time
+
+EMAIL = f"test-{int(time.time())}@test.com"
+PASSWORD = "testpassword123"
+
 print("=" * 50)
 print("TESTING TOOLS SYNC API (Python)")
 print("=" * 50)
 
+# 0. Validation - short password should be rejected
+print("\n[0] POST /auth/register (short password - should fail)")
+status, data = post("/auth/register", {"email": "fail@test.com", "password": "short"})
+print(f"  Status: {status} (expected 422)")
+assert status == 422, f"Expected 422 but got {status}"
+print("  PASS - short password rejected")
+
 # 1. Register
-print("\n[1] POST /auth/register")
-status, data = post("/auth/register", {"email": "test2@test.com", "password": "testpassword123"})
+print(f"\n[1] POST /auth/register ({EMAIL})")
+status, data = post("/auth/register", {"email": EMAIL, "password": PASSWORD})
 print(f"  Status: {status}")
 print(f"  Response: {json.dumps(data, indent=2)[:200]}")
 
 token = data.get("token")
 
 # 2. Login
-print("\n[2] POST /auth/login")
-status, data = post("/auth/login", {"email": "test2@test.com", "password": "testpassword123"})
+print(f"\n[2] POST /auth/login ({EMAIL})")
+status, data = post("/auth/login", {"email": EMAIL, "password": PASSWORD})
 print(f"  Status: {status}")
 print(f"  Response: {json.dumps(data, indent=2)[:200]}")
 token = data.get("token", token)

@@ -1,8 +1,8 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Optional
 
 from beanie import Document, Indexed
-from pydantic import EmailStr
+from pydantic import EmailStr, Field
 
 
 class User(Document):
@@ -12,7 +12,7 @@ class User(Document):
     refresh_token_hash: Optional[str] = None
     reset_token_hash: Optional[str] = None
     reset_token_expiry: Optional[datetime] = None
-    created_at: datetime = datetime.utcnow()
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     class Settings:
         name = "users"

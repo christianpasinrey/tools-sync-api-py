@@ -1,5 +1,7 @@
+import logging
+
 from fastapi import APIRouter, Depends, Request, Response
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 
 from src.config.settings import settings
 from src.controllers import auth_controller
@@ -10,26 +12,30 @@ from src.middleware.rate_limiter import (
     FORGOT_PASSWORD_LIMIT,
 )
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 # --- Request schemas ---
 
+MIN_PASSWORD_LENGTH = 8
+
 
 class RegisterBody(BaseModel):
     email: EmailStr
-    password: str
+    password: str = Field(min_length=MIN_PASSWORD_LENGTH)
     vaultSalt: list[int] | None = None
 
 
 class LoginBody(BaseModel):
     email: EmailStr
-    password: str
+    password: str = Field(min_length=1)
 
 
 class ChangePasswordBody(BaseModel):
-    currentPassword: str
-    newPassword: str
+    currentPassword: str = Field(min_length=1)
+    newPassword: str = Field(min_length=MIN_PASSWORD_LENGTH)
     newVaultSalt: list[int]
 
 
@@ -45,7 +51,7 @@ class VerifyResetTokenBody(BaseModel):
 class ResetAccountBody(BaseModel):
     email: EmailStr
     token: str
-    newPassword: str
+    newPassword: str = Field(min_length=MIN_PASSWORD_LENGTH)
     newVaultSalt: list[int]
 
 

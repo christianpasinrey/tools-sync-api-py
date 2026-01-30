@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -13,13 +14,19 @@ from src.middleware.security_headers import SecurityHeadersMiddleware
 from src.routes.auth import router as auth_router
 from src.routes.vault import router as vault_router
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
+logger = logging.getLogger(__name__)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
     await connect_db()
+    logger.info("Application started")
     yield
-    # Shutdown
+    logger.info("Application shutdown")
 
 
 app = FastAPI(
