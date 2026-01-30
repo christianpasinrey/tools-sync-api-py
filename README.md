@@ -148,19 +148,32 @@ src/
     └── email.py            # SMTP email for password reset
 ```
 
+## Testing
+
+```bash
+# With the server running:
+python test_api.py
+```
+
+Runs 8 sequential tests: password validation, register, login, vault upsert, list, get, sync-status, and root health check.
+
 ## Security
 
 | Feature | Implementation |
 |---------|---------------|
+| Password validation | Minimum 8 characters (enforced server-side via Pydantic) |
 | Password hashing | bcrypt (12 rounds) |
-| Token hashing | SHA-256 pre-hash + bcrypt (10 rounds) |
+| Token hashing | SHA-256 pre-hash + bcrypt (10 rounds) — handles tokens >72 bytes |
 | Access token | JWT, 15 min, in-memory |
 | Refresh token | JWT, 7 days, HttpOnly/Secure/SameSite cookie with rotation |
 | Reset token | crypto random 64-char hex, bcrypt hashed, 1h expiry, single-use |
+| Atomic registration | User rollback on token generation failure |
 | Rate limiting | Auth: 10/15min, Forgot: 3/15min, API: 300/15min, Batch: 10/min |
 | Headers | X-Content-Type-Options, X-Frame-Options, HSTS, CSP, Referrer-Policy |
 | CORS | Configured origin only, credentials enabled |
 | Payload limit | 10 MB per item |
+| Logging | Structured logging (no sensitive data in logs) |
+| Timezone-aware | All timestamps use `datetime.now(UTC)` |
 
 ## License
 
